@@ -1,3 +1,5 @@
+import runnerAvatar from '../assets/images/runner_hero_avatar_1790690132233.jpg';
+
 export interface Character {
   id: string;
   name: string;
@@ -34,7 +36,7 @@ export const CHARACTERS: Character[] = [
     id: 'mateo',
     name: 'Mateo "El Ágil"',
     title: 'Explorador Todoterreno',
-    avatar: '/src/assets/images/runner_hero_avatar_1790690132233.jpg',
+    avatar: runnerAvatar,
     speed: 8,
     agility: 8,
     mudResistance: 7,
@@ -46,7 +48,7 @@ export const CHARACTERS: Character[] = [
     id: 'lia',
     name: 'Lía "Pies de Viento"',
     title: 'Saltadora de Jungla',
-    avatar: '/src/assets/images/runner_hero_avatar_1790690132233.jpg',
+    avatar: runnerAvatar,
     speed: 9,
     agility: 10,
     mudResistance: 5,
@@ -58,7 +60,7 @@ export const CHARACTERS: Character[] = [
     id: 'roco',
     name: 'Roco "El Imparable"',
     title: 'Guardián del Pantano',
-    avatar: '/src/assets/images/runner_hero_avatar_1790690132233.jpg',
+    avatar: runnerAvatar,
     speed: 6,
     agility: 6,
     mudResistance: 10,

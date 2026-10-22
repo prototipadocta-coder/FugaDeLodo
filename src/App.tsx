@@ -19,6 +19,7 @@ import { MudRunnerLiveTeaser } from './components/MudRunnerLiveTeaser';
 import { HowToPlayModal } from './components/HowToPlayModal';
 import { LeaderboardModal } from './components/LeaderboardModal';
 import { MudRunnerGame } from './components/MudRunnerGame';
+import mudHeroBg from './assets/images/mud_avalanche_hero_1790690118527.jpg';
 
 export default function App() {
   const [viewMode, setViewMode] = useState<'TITLE_SCREEN' | 'GAME_RUNNING'>('TITLE_SCREEN');
@@ -69,7 +70,7 @@ export default function App() {
       {/* Background Cinematic Cover with Gradients */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
         <img
-          src="/src/assets/images/mud_avalanche_hero_1790690118527.jpg"
+          src={mudHeroBg}
           alt="Avalancha de lodo amenazante"
           referrerPolicy="no-referrer"
           className="w-full h-full object-cover object-center opacity-35 scale-105 filter blur-[1px] transform duration-1000"
