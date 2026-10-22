@@ -1,0 +1,6 @@
+{
+  "name": "Fuga del Lodo: Avalancha Salvaje",
+  "description": "Pantalla de inicio interactiva del videojuego de carrera y supervivencia contra la avalancha de lodo con 3 vidas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
