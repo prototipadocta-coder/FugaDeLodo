@@ -191,7 +191,11 @@ export default function App() {
               <span>Supervivencia Arcade</span>
               <span aria-hidden="true">·</span>
               <span className="text-red-400 font-bold flex items-center gap-1">
-                <Heart className="w-3.5 h-3.5 fill-red-500 text-red-500 inline" /> 3 Vidas
+                <Heart className="w-3.5 h-3.5 fill-red-500 text-red-500 inline" /> 6 Vidas
+              </span>
+              <span aria-hidden="true">·</span>
+              <span className="text-amber-300 font-bold flex items-center gap-1">
+                🐶 Perrito Compañero
               </span>
             </div>
 
@@ -208,22 +212,25 @@ export default function App() {
             {/* Thematic Subtitle & Mechanics Explanation */}
             <p className="max-w-2xl mx-auto text-sm sm:text-base text-stone-300 font-body leading-relaxed text-balance">
               La presa de barro ha colapsado y una gigantesca avalancha de lodo viene devorando la colina.
-              ¡Corre a toda velocidad, salta obstáculos y no dejes que el fango te alcance! Tienes exactamente{' '}
-              <strong className="text-red-400 font-semibold">3 vidas</strong> para llegar lo más lejos posible.
+              ¡Salta alto sobre los <strong>cactus con espinas</strong>, corre velozmente junto a tu <strong>perrito compañero</strong> y sobrevive!
+              Cuentas con <strong className="text-red-400 font-semibold">6 vidas</strong> para llegar lo más lejos posible.
             </p>
 
-            {/* 3 Lives Visual Badge Lockup */}
+            {/* 6 Lives Visual Badge Lockup */}
             <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-xl bg-stone-900/90 border border-amber-800/60 shadow-lg">
               <span className="text-xs uppercase font-heading font-bold tracking-wider text-stone-400">
                 Reserva de Salud:
               </span>
-              <div className="flex items-center gap-1.5">
-                <Heart className="w-5 h-5 text-red-500 fill-red-500 animate-pulse drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
-                <Heart className="w-5 h-5 text-red-500 fill-red-500 animate-pulse delay-75 drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
-                <Heart className="w-5 h-5 text-red-500 fill-red-500 animate-pulse delay-150 drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <Heart
+                    key={i}
+                    className="w-4 h-4 sm:w-5 sm:h-5 text-red-500 fill-red-500 animate-pulse drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]"
+                  />
+                ))}
               </div>
-              <span className="text-xs font-mono text-amber-300 font-bold">
-                3 VIDAS
+              <span className="text-xs font-mono text-amber-300 font-bold ml-1">
+                6 VIDAS
               </span>
             </div>
           </section>

@@ -12,19 +12,19 @@ export const MudRunnerLiveTeaser: React.FC<MudRunnerLiveTeaserProps> = ({
   const [distance, setDistance] = useState(140);
   const [mudDistance, setMudDistance] = useState(24);
   const [isJumping, setIsJumping] = useState(false);
-  const [lives, setLives] = useState(3);
+  const [lives, setLives] = useState(6);
   const [lastActionMsg, setLastActionMsg] = useState<string | null>(null);
 
-  // Jump control
+  // Jump control (Salto alto potenciado)
   const triggerJump = () => {
     if (isJumping) return;
     setIsJumping(true);
     sounds.playJump();
-    setLastActionMsg('¡Salto Limpio! +15m');
+    setLastActionMsg('¡Gran Salto Alto! 🐾 +18m');
     setMudDistance((prev) => Math.min(35, prev + 3));
     setTimeout(() => {
       setIsJumping(false);
-    }, 550);
+    }, 620);
     setTimeout(() => {
       setLastActionMsg(null);
     }, 1200);
@@ -194,10 +194,42 @@ export const MudRunnerLiveTeaser: React.FC<MudRunnerLiveTeaserProps> = ({
         ctx.stroke();
       });
 
-      // 3. Mud Avalanche Wave (on the left chasing the runner)
+      // 3. Torrente de Agua Azul Generando el Alud de Lodo
       const mudWaveWidth = 140 + Math.sin(frame * 0.08) * 15;
-      const mudGrad = ctx.createLinearGradient(0, 0, mudWaveWidth, 0);
-      mudGrad.addColorStop(0, '#1c1006');
+      const waterWaveWidth = mudWaveWidth * 0.65;
+
+      // 3a. Torrente de Agua Azul
+      const waterGrad = ctx.createLinearGradient(0, 0, waterWaveWidth, 0);
+      waterGrad.addColorStop(0, '#0369a1');
+      waterGrad.addColorStop(0.4, '#0284c7');
+      waterGrad.addColorStop(0.8, '#38bdf8');
+      waterGrad.addColorStop(1, 'rgba(186, 230, 253, 0.4)');
+      ctx.fillStyle = waterGrad;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(waterWaveWidth * 0.7, 0);
+      for (let y = 0; y <= h; y += 15) {
+        const wOffset = Math.sin((y * 0.06) + frame * 0.18) * 14 + Math.cos(frame * 0.14) * 6;
+        ctx.lineTo(waterWaveWidth + wOffset, y);
+      }
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      ctx.fill();
+
+      // Cresta de espuma blanca de agua azul
+      ctx.strokeStyle = '#e0f2fe';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (let y = 0; y <= groundY; y += 15) {
+        const wOffset = Math.sin((y * 0.06) + frame * 0.18) * 14 + Math.cos(frame * 0.14) * 6;
+        if (y === 0) ctx.moveTo(waterWaveWidth + wOffset, y);
+        else ctx.lineTo(waterWaveWidth + wOffset, y);
+      }
+      ctx.stroke();
+
+      // 3b. Masa de Lodo Generada por el Agua
+      const mudGrad = ctx.createLinearGradient(waterWaveWidth * 0.4, 0, mudWaveWidth, 0);
+      mudGrad.addColorStop(0, 'rgba(28, 16, 6, 0.95)');
       mudGrad.addColorStop(0.7, '#451a03');
       mudGrad.addColorStop(0.95, '#78350f');
       mudGrad.addColorStop(1, 'rgba(120, 53, 15, 0.1)');
@@ -227,7 +259,7 @@ export const MudRunnerLiveTeaser: React.FC<MudRunnerLiveTeaserProps> = ({
       }
       ctx.stroke();
 
-      // Mud spray droplets spawning from wave
+      // Droplets spawning from water & mud wave
       if (frame % 2 === 0) {
         particles.push({
           x: mudWaveWidth + 10,
@@ -236,7 +268,7 @@ export const MudRunnerLiveTeaser: React.FC<MudRunnerLiveTeaserProps> = ({
           vy: (Math.random() - 0.5) * 4,
           size: Math.random() * 6 + 3,
           alpha: 0.9,
-          color: Math.random() > 0.5 ? '#92400e' : '#b45309',
+          color: Math.random() > 0.4 ? (Math.random() > 0.5 ? '#92400e' : '#b45309') : '#38bdf8',
         });
       }
 
@@ -264,8 +296,8 @@ export const MudRunnerLiveTeaser: React.FC<MudRunnerLiveTeaserProps> = ({
       // 5. Runner Character
       const runnerX = w * 0.62;
       const runnerBaseY = groundY - 2;
-      // Jump parabolic trajectory
-      const jumpProgress = isJumping ? Math.sin((frame % 30) / 30 * Math.PI) * 45 : 0;
+      // Jump parabolic trajectory (Salto alto potenciado)
+      const jumpProgress = isJumping ? Math.sin((frame % 30) / 30 * Math.PI) * 75 : 0;
       const runnerY = runnerBaseY - jumpProgress;
 
       // Runner shadow
@@ -409,6 +441,123 @@ export const MudRunnerLiveTeaser: React.FC<MudRunnerLiveTeaserProps> = ({
       ctx.lineTo(runnerX - 12, runnerY - 50 + hairSway);
       ctx.stroke();
 
+      // 5b. Perrito Compañero en el Teaser (Corre y salta junto a ella)
+      const dogX = runnerX - 36;
+      const dogProgress = isJumping ? jumpProgress * 0.92 : 0;
+      const dogY = runnerBaseY - dogProgress;
+
+      if (!isJumping) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+        ctx.beginPath();
+        ctx.ellipse(dogX + 2, groundY + 2, 12, 3.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const dogLegCycle = !isJumping ? Math.sin(frame * 0.42) : 0.6;
+      const tailOsc = Math.sin(frame * 0.5) * 7;
+      const earBnc = Math.cos(frame * 0.42) * 3;
+
+      // Patas del perrito
+      ctx.strokeStyle = '#b45309';
+      ctx.lineWidth = 2.8;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(dogX - 6, dogY - 5);
+      ctx.lineTo(dogX - 6 - dogLegCycle * 6, dogY);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(dogX + 8, dogY - 5);
+      ctx.lineTo(dogX + 8 + dogLegCycle * 6, dogY);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(dogX - 3, dogY - 5);
+      ctx.lineTo(dogX - 3 + dogLegCycle * 6, dogY);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(dogX + 11, dogY - 5);
+      ctx.lineTo(dogX + 11 - dogLegCycle * 6, dogY);
+      ctx.stroke();
+
+      // Cola alegre
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.moveTo(dogX - 8, dogY - 12);
+      ctx.quadraticCurveTo(dogX - 16, dogY - 18 + tailOsc, dogX - 14, dogY - 12 + tailOsc);
+      ctx.stroke();
+
+      // Cuerpo
+      ctx.fillStyle = '#d97706';
+      ctx.beginPath();
+      ctx.roundRect(dogX - 9, dogY - 15, 20, 11, 5);
+      ctx.fill();
+
+      // Pecho claro
+      ctx.fillStyle = '#fef3c7';
+      ctx.beginPath();
+      ctx.ellipse(dogX + 7, dogY - 11, 3.5, 4.5, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cabeza
+      ctx.fillStyle = '#d97706';
+      ctx.beginPath();
+      ctx.arc(dogX + 11, dogY - 17, 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Hocico
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.roundRect(dogX + 14, dogY - 16, 6, 4.5, 2);
+      ctx.fill();
+
+      // Nariz negra
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(dogX + 20, dogY - 14.5, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ojo
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(dogX + 12, dogY - 18, 1.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Oreja floppy
+      ctx.fillStyle = '#92400e';
+      ctx.beginPath();
+      ctx.ellipse(dogX + 7, dogY - 18 + earBnc, 3, 5, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Collar rojo con medallita
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(dogX + 10, dogY - 13, 3.5, 0.5, Math.PI * 0.9);
+      ctx.stroke();
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.arc(dogX + 12, dogY - 10, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Globo de ladrido en salto
+      if (isJumping) {
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.beginPath();
+        ctx.roundRect(dogX - 6, dogY - 36, 48, 16, 4);
+        ctx.fill();
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        ctx.fillStyle = '#78350f';
+        ctx.fillText('¡Guau! 🐾', dogX - 2, dogY - 24);
+      }
+
       // Footstep grass puffs
       if (!isJumping && frame % 4 === 0) {
         particles.push({
@@ -442,16 +591,16 @@ export const MudRunnerLiveTeaser: React.FC<MudRunnerLiveTeaserProps> = ({
     <div className="relative w-full rounded-2xl overflow-hidden border border-amber-900/60 bg-stone-900 shadow-2xl shadow-amber-950/40">
       {/* Top HUD inside the preview */}
       <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-4 py-2.5 bg-gradient-to-b from-stone-950/90 via-stone-950/60 to-transparent backdrop-blur-xs">
-        {/* Lives indicator (3 vidas) */}
+        {/* Lives indicator (6 vidas) */}
         <div className="flex items-center gap-2">
           <span className="text-xs uppercase tracking-wider font-heading font-semibold text-amber-300">
             Vidas Disponibles:
           </span>
           <div className="flex items-center gap-1">
-            {[1, 2, 3].map((heartIndex) => (
+            {[1, 2, 3, 4, 5, 6].map((heartIndex) => (
               <span
                 key={heartIndex}
-                className={`text-xl transition-transform duration-300 ${
+                className={`text-base sm:text-lg transition-transform duration-300 ${
                   heartIndex <= lives
                     ? 'text-red-500 scale-100 drop-shadow-[0_0_8px_rgba(239,68,68,0.7)]'
                     : 'text-stone-600 scale-90'
@@ -463,7 +612,7 @@ export const MudRunnerLiveTeaser: React.FC<MudRunnerLiveTeaserProps> = ({
             ))}
           </div>
           <span className="text-xs font-mono text-stone-400 ml-1">
-            ({lives}/3)
+            ({lives}/6)
           </span>
         </div>
 

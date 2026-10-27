@@ -30,7 +30,7 @@ interface Obstacle {
   y: number;
   width: number;
   height: number;
-  type: 'rock' | 'puddle' | 'log' | 'high_branch';
+  type: 'cactus' | 'rock' | 'puddle' | 'log' | 'high_branch';
   passed: boolean;
 }
 
@@ -40,7 +40,7 @@ interface Collectible {
   y: number;
   width: number;
   height: number;
-  type: 'coin' | 'water' | 'spring' | 'heart';
+  type: 'coin' | 'water' | 'spring' | 'heart' | 'energy';
   collected: boolean;
 }
 
@@ -73,18 +73,20 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
 
   // React state for HUD
   const [gameState, setGameState] = useState<'PLAYING' | 'PAUSED' | 'GAME_OVER'>('PLAYING');
-  const [lives, setLives] = useState(3);
+  const [lives, setLives] = useState(6);
   const [distanceMeters, setDistanceMeters] = useState(0);
   const [mudGapMeters, setMudGapMeters] = useState(35);
   const [coins, setCoins] = useState(0);
   const [gameOverReason, setGameOverReason] = useState<string>('');
   const [isSuperJumpActive, setIsSuperJumpActive] = useState(false);
+  const [isTurboActive, setIsTurboActive] = useState(false);
+  const [isFloodActive, setIsFloodActive] = useState(false);
   const [isMuted, setIsMuted] = useState(sounds.isMuted);
 
   // References for the 60fps game loop
   const stateRef = useRef({
     gameState: 'PLAYING' as 'PLAYING' | 'PAUSED' | 'GAME_OVER',
-    lives: 3,
+    lives: 6,
     distance: 0,
     coins: 0,
     mudGap: 35, // Distance in meters between mud wave and player (0 = eaten)
@@ -104,6 +106,24 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
       maxJumps: character.id === 'lia' ? 2 : 1, // Lía has double jump!
       invulnerableTimer: 0,
       superJumpTimer: 0,
+      turboTimer: 0, // Turbo Energy Boost!
+    },
+    // Perrito Compañero Guardián que ayuda a la niña
+    dog: {
+      x: 142,
+      y: 0,
+      vy: 0,
+      isGrounded: true,
+      barkTimer: 0,
+      barkText: '¡Guau! 🐾',
+      fetchTimer: 0,
+    },
+    // Flood mechanics
+    flood: {
+      isActive: false,
+      level: 0, // 0 to 1
+      duration: 0,
+      nextDistance: 240, // Distance when next flood triggers
     },
     // Obstacles and items
     obstacles: [] as Obstacle[],
@@ -117,7 +137,7 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
     entityCounter: 0,
   });
 
-  // Jump trigger
+  // Jump trigger (Saltar más alto con impulso ágil y perrito sincronizado)
   const performJump = useCallback(() => {
     const s = stateRef.current;
     if (s.gameState !== 'PLAYING') return;
@@ -128,12 +148,19 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
       r.isGrounded = false;
       r.isSliding = false; // cancel slide
       r.jumpCount++;
-      const jumpPower = r.superJumpTimer > 0 ? -14.5 : character.id === 'lia' ? -13.0 : -11.5;
+      // Salto mucho más alto para sobrevolar cactus y agua cómodamente
+      const jumpPower = r.superJumpTimer > 0 ? -19.5 : character.id === 'lia' ? -16.8 : -15.4;
       r.vy = jumpPower;
       sounds.playJump();
 
+      // El perrito salta junto a ella entusiasmado
+      s.dog.vy = jumpPower * 0.94;
+      s.dog.isGrounded = false;
+      s.dog.barkTimer = 26;
+      s.dog.barkText = '¡Salto! 🐾';
+
       // Jump dust & grass particles
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 7; i++) {
         s.particles.push({
           x: r.x + 10,
           y: 280,
@@ -208,7 +235,7 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
   const restartGame = () => {
     const s = stateRef.current;
     s.gameState = 'PLAYING';
-    s.lives = 3;
+    s.lives = 6;
     s.distance = 0;
     s.coins = 0;
     s.mudGap = 35;
@@ -222,6 +249,17 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
     s.runner.jumpCount = 0;
     s.runner.invulnerableTimer = 0;
     s.runner.superJumpTimer = 0;
+    s.runner.turboTimer = 0;
+    s.dog.x = 142;
+    s.dog.y = 0;
+    s.dog.vy = 0;
+    s.dog.isGrounded = true;
+    s.dog.barkTimer = 0;
+    s.dog.fetchTimer = 0;
+    s.flood.isActive = false;
+    s.flood.level = 0;
+    s.flood.duration = 0;
+    s.flood.nextDistance = 240;
     s.obstacles = [];
     s.collectibles = [];
     s.particles = [];
@@ -229,12 +267,14 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
     s.screenShake = 0;
     s.frame = 0;
 
-    setLives(3);
+    setLives(6);
     setDistanceMeters(0);
     setMudGapMeters(35);
     setCoins(0);
     setGameState('PLAYING');
     setIsSuperJumpActive(false);
+    setIsTurboActive(false);
+    setIsFloodActive(false);
 
     sounds.playStartFanfare();
     sounds.startMusic();
@@ -259,11 +299,51 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
         const runner = s.runner;
 
         // 1. Advance distance & calculate speed
-        s.distance += Math.round(s.currentSpeed * 0.12);
-        // Slowly increase base speed over distance
         const speedBoostFromDist = Math.min(3.5, s.distance * 0.001);
-        const targetSpeed = s.baseSpeed + speedBoostFromDist;
-        s.currentSpeed += (targetSpeed - s.currentSpeed) * 0.05;
+        let targetSpeed = s.baseSpeed + speedBoostFromDist;
+
+        // Turbo Energy Boost (correr más rápido)
+        if (runner.turboTimer > 0) {
+          targetSpeed *= 1.55;
+          // Pushes mud gap back while speeding
+          s.mudGap = Math.min(50, s.mudGap + 0.04);
+        }
+
+        // Resistencia de agua si hay inundación y el jugador camina sobre el agua
+        if (s.flood.level > 0.4 && runner.isGrounded && runner.turboTimer === 0) {
+          targetSpeed *= 0.84;
+        }
+
+        s.currentSpeed += (targetSpeed - s.currentSpeed) * 0.08;
+        s.distance += Math.round(s.currentSpeed * 0.12);
+
+        // Ciclo de Inundaciones
+        if (!s.flood.isActive && s.distance >= s.flood.nextDistance) {
+          s.flood.isActive = true;
+          s.flood.duration = 380; // Duración de la inundación
+          setIsFloodActive(true);
+          sounds.playMudSplash();
+          s.floatingTexts.push({
+            id: Math.random(),
+            text: '🌊 ¡ALERTA DE INUNDACIÓN!',
+            x: canvas.width / 2 - 80,
+            y: groundY - 70,
+            alpha: 1.0,
+            color: '#38bdf8',
+          });
+        }
+
+        if (s.flood.isActive) {
+          s.flood.level = Math.min(1.0, s.flood.level + 0.04);
+          s.flood.duration--;
+          if (s.flood.duration <= 0) {
+            s.flood.isActive = false;
+            s.flood.nextDistance = s.distance + 350 + Math.random() * 150;
+            setIsFloodActive(false);
+          }
+        } else {
+          s.flood.level = Math.max(0, s.flood.level - 0.03);
+        }
 
         // Mud wave natural advance
         s.mudGap = Math.max(0, s.mudGap - s.mudAdvanceRate);
@@ -281,9 +361,9 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
           if (onSaveHighScore) onSaveHighScore(s.distance);
         }
 
-        // 2. Runner Physics
+        // 2. Runner Physics (Saltar más alto con gravedad suave y fluida)
         if (!runner.isGrounded) {
-          runner.vy += 0.58; // Gravity
+          runner.vy += 0.54; // Gravity suave para saltar más alto
           runner.y += runner.vy;
           if (runner.y >= 0) {
             runner.y = 0;
@@ -291,6 +371,63 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
             runner.isGrounded = true;
             runner.isJumping = false;
             runner.jumpCount = 0;
+          }
+        }
+
+        // 2b. Perrito Compañero: Sigue a la niña, salta, avisa peligros y la ayuda
+        s.dog.x = runner.x - 38;
+        if (!s.dog.isGrounded) {
+          s.dog.vy += 0.54;
+          s.dog.y += s.dog.vy;
+          if (s.dog.y >= 0) {
+            s.dog.y = 0;
+            s.dog.vy = 0;
+            s.dog.isGrounded = true;
+          }
+        }
+
+        // Si la niña salta y el perrito aún no ha saltado, salta a su lado
+        if (!runner.isGrounded && s.dog.isGrounded && runner.vy < -5) {
+          s.dog.isGrounded = false;
+          s.dog.vy = runner.vy * 0.92;
+        }
+
+        if (s.dog.barkTimer > 0) s.dog.barkTimer--;
+        if (s.dog.fetchTimer > 0) s.dog.fetchTimer--;
+
+        // El perrito ladra para avisar cuando se aproxima un cactus u obstáculo peligroso
+        const approachingObs = s.obstacles.find((o) => o.x > runner.x && o.x < runner.x + 210);
+        if (approachingObs && s.dog.barkTimer <= 0) {
+          s.dog.barkTimer = 38;
+          s.dog.barkText =
+            approachingObs.type === 'cactus'
+              ? '¡Cactus! 🌵'
+              : approachingObs.type === 'puddle'
+              ? '¡Lodo! ⚠️'
+              : '¡Cuidado! 🐾';
+        }
+
+        // Ayuda del perrito (Imán y recolección): Atrae monedas y orbes hacia la corredora
+        for (let it = 0; it < s.collectibles.length; it++) {
+          const item = s.collectibles[it];
+          if (!item.collected) {
+            const dogDist = Math.hypot(
+              item.x - (s.dog.x + 12),
+              item.y - (groundY + s.dog.y - 15)
+            );
+            if (dogDist < 125) {
+              const pullAngle = Math.atan2(
+                groundY + runner.y - 30 - item.y,
+                runner.x - item.x
+              );
+              item.x += Math.cos(pullAngle) * 7.5;
+              item.y += Math.sin(pullAngle) * 7.5;
+              if (s.dog.fetchTimer <= 0 && s.dog.barkTimer <= 0) {
+                s.dog.fetchTimer = 40;
+                s.dog.barkTimer = 32;
+                s.dog.barkText = '¡Te ayudo! ✨';
+              }
+            }
           }
         }
 
@@ -308,25 +445,34 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
           runner.superJumpTimer--;
           if (runner.superJumpTimer === 0) setIsSuperJumpActive(false);
         }
+        if (runner.turboTimer > 0) {
+          runner.turboTimer--;
+          if (runner.turboTimer === 0) setIsTurboActive(false);
+        }
         if (s.screenShake > 0) s.screenShake--;
 
-        // 3. Spawning Obstacles
+        // 3. Spawning Obstacles (Cactus con espinas, charcos de lodo, troncos y ramas altas)
         s.nextObstacleDist -= s.currentSpeed;
         if (s.nextObstacleDist <= 0) {
           s.entityCounter++;
-          const obstacleTypes: ('rock' | 'puddle' | 'log' | 'high_branch')[] = [
-            'rock',
+          const obstacleTypes: ('cactus' | 'cactus' | 'puddle' | 'log' | 'high_branch')[] = [
+            'cactus',
+            'cactus', // Mayor frecuencia para destacar los nuevos cactus campestres
             'puddle',
             'log',
             'high_branch',
           ];
           const chosenType = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
 
-          let width = 36;
-          let height = 36;
+          let width = 40;
+          let height = 50;
           let y = groundY - height;
 
-          if (chosenType === 'puddle') {
+          if (chosenType === 'cactus') {
+            width = 40;
+            height = 52;
+            y = groundY - height;
+          } else if (chosenType === 'puddle') {
             width = 65;
             height = 16;
             y = groundY - 10;
@@ -360,13 +506,15 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
         if (s.nextItemDist <= 0) {
           s.entityCounter++;
           const rand = Math.random();
-          let itemType: 'coin' | 'water' | 'spring' | 'heart' = 'coin';
+          let itemType: 'coin' | 'water' | 'spring' | 'heart' | 'energy' = 'coin';
 
-          if (rand > 0.88 && s.lives < 3) {
+          if (rand > 0.88 && s.lives < 6) {
             itemType = 'heart';
-          } else if (rand > 0.72) {
+          } else if (rand > 0.74) {
+            itemType = 'energy'; // Orbe de energía para correr más rápido
+          } else if (rand > 0.60) {
             itemType = 'water';
-          } else if (rand > 0.6) {
+          } else if (rand > 0.48) {
             itemType = 'spring';
           }
 
@@ -447,7 +595,7 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
             if (s.lives <= 0) {
               s.gameState = 'GAME_OVER';
               setGameState('GAME_OVER');
-              setGameOverReason('¡Perdiste tus 3 vidas por los obstáculos del camino!');
+              setGameOverReason('¡Perdiste tus 6 vidas por los obstáculos del camino!');
               sounds.playGameOver();
               sounds.stopMusic();
               if (onSaveHighScore) onSaveHighScore(s.distance);
@@ -500,6 +648,20 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
                 alpha: 1.0,
                 color: '#38bdf8',
               });
+            } else if (item.type === 'energy') {
+              // Super speed turbo boost
+              runner.turboTimer = 340; // ~5.6 seconds of super speed (+55%)
+              setIsTurboActive(true);
+              s.mudGap = Math.min(50, s.mudGap + 6); // Pushes the mud wave back
+              sounds.playPowerup();
+              s.floatingTexts.push({
+                id: Math.random(),
+                text: '⚡ ¡TURBO ENERGÍA! +55% VELOCIDAD',
+                x: item.x,
+                y: item.y - 20,
+                alpha: 1.0,
+                color: '#facc15',
+              });
             } else if (item.type === 'spring') {
               runner.superJumpTimer = 320; // ~5 seconds
               setIsSuperJumpActive(true);
@@ -513,7 +675,7 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
                 color: '#a855f7',
               });
             } else if (item.type === 'heart') {
-              if (s.lives < 3) {
+              if (s.lives < 6) {
                 s.lives += 1;
                 setLives(s.lives);
               }
@@ -561,6 +723,7 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
       const h = canvas.height;
       const groundY = 295;
       const frame = s.frame;
+      const runner = s.runner;
 
       // 1. Sky & Countryside Sunset Gradient (Atardecer en el campo)
       // Cielo azul claro arriba transitando a tonos cálidos dorados y anaranjados hacia el horizonte
@@ -691,6 +854,54 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
         ctx.fill();
       }
 
+      // 2b. Inundaciones de agua azul sobre el campo (Flooding)
+      if (s.flood.level > 0.01) {
+        const floodHeight = 24 * s.flood.level;
+        const floodSurfaceY = groundY - floodHeight;
+
+        // Cuerpo de agua azul translúcida inundando el campo
+        const waterGrad = ctx.createLinearGradient(0, floodSurfaceY, 0, h);
+        waterGrad.addColorStop(0, 'rgba(56, 189, 248, 0.75)'); // Azul cielo luminoso en superficie
+        waterGrad.addColorStop(0.25, 'rgba(14, 165, 233, 0.82)'); // Azul vibrante
+        waterGrad.addColorStop(1.0, 'rgba(3, 105, 161, 0.90)'); // Azul profundo
+        ctx.fillStyle = waterGrad;
+
+        ctx.beginPath();
+        ctx.moveTo(0, floodSurfaceY);
+        for (let x = 0; x <= w; x += 16) {
+          const wave = Math.sin((x * 0.04) + frame * 0.12) * (3.5 * s.flood.level);
+          ctx.lineTo(x, floodSurfaceY + wave);
+        }
+        ctx.lineTo(w, h);
+        ctx.lineTo(0, h);
+        ctx.closePath();
+        ctx.fill();
+
+        // Cresta espumosa de la inundación
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        for (let x = 0; x <= w; x += 16) {
+          const wave = Math.sin((x * 0.04) + frame * 0.12) * (3.5 * s.flood.level);
+          if (x === 0) ctx.moveTo(x, floodSurfaceY + wave);
+          else ctx.lineTo(x, floodSurfaceY + wave);
+        }
+        ctx.stroke();
+
+        // Salpicaduras de agua cuando el personaje corre en el agua
+        if (runner.isGrounded && runner.y >= 0 && frame % 3 === 0) {
+          s.particles.push({
+            x: runner.x + (Math.random() - 0.5) * 18,
+            y: floodSurfaceY + 2,
+            vx: (Math.random() - 0.5) * 4 - s.currentSpeed * 0.35,
+            vy: -Math.random() * 3.5 - 2,
+            size: Math.random() * 3.5 + 2,
+            alpha: 0.85,
+            color: '#7dd3fc',
+          });
+        }
+      }
+
       // 3. Render Collectibles
       s.collectibles.forEach((item) => {
         const bob = Math.sin((frame + item.id * 10) * 0.1) * 4;
@@ -707,6 +918,32 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
           ctx.fillStyle = '#78350f';
           ctx.font = 'bold 11px sans-serif';
           ctx.fillText('$', item.x + 9, cy + 16);
+        } else if (item.type === 'energy') {
+          // Orbe de energía eléctrica dorada/celeste (Turbo speed)
+          const energyPulse = Math.sin((frame + item.id * 8) * 0.2) * 3;
+          const energyAura = ctx.createRadialGradient(
+            item.x + 12, cy + 12, 3,
+            item.x + 12, cy + 12, 16 + energyPulse
+          );
+          energyAura.addColorStop(0, 'rgba(250, 204, 21, 0.95)');
+          energyAura.addColorStop(0.5, 'rgba(56, 189, 248, 0.65)');
+          energyAura.addColorStop(1, 'rgba(56, 189, 248, 0)');
+          ctx.fillStyle = energyAura;
+          ctx.beginPath();
+          ctx.arc(item.x + 12, cy + 12, 16 + energyPulse, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#fef08a';
+          ctx.beginPath();
+          ctx.arc(item.x + 12, cy + 12, 9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          ctx.fillStyle = '#0369a1';
+          ctx.font = 'bold 13px sans-serif';
+          ctx.fillText('⚡', item.x + 6, cy + 16.5);
         } else if (item.type === 'water') {
           // Water bottle icon
           ctx.fillStyle = '#38bdf8';
@@ -760,24 +997,90 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
             ctx.arc(obs.x + obs.width / 2, groundY, 4, 0, Math.PI * 2);
             ctx.fill();
           }
-        } else if (obs.type === 'rock') {
-          // Sharp rock
-          ctx.fillStyle = '#44403c';
+        } else if (obs.type === 'cactus' || obs.type === 'rock') {
+          // Cactus silvestre de campo con espinas y flores (Reemplaza las espinas por cactus)
+          const cx = obs.x + obs.width / 2;
+          const baseY = groundY;
+          const cHeight = obs.height;
+          const topY = obs.y;
+
+          // Montículo de tierra base
+          ctx.fillStyle = '#78350f';
           ctx.beginPath();
-          ctx.moveTo(obs.x, groundY);
-          ctx.lineTo(obs.x + obs.width * 0.4, obs.y);
-          ctx.lineTo(obs.x + obs.width, groundY);
-          ctx.closePath();
+          ctx.ellipse(cx, baseY, obs.width * 0.45, 4, 0, 0, Math.PI * 2);
           ctx.fill();
-          ctx.strokeStyle = '#292524';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-          // Rock highlight
-          ctx.strokeStyle = '#78716c';
+
+          // Tallo central del cactus con esquinas redondeadas
+          const trunkW = 18;
+          const trunkX = cx - trunkW / 2;
+          const cactusGrad = ctx.createLinearGradient(trunkX, 0, trunkX + trunkW, 0);
+          cactusGrad.addColorStop(0, '#15803d'); // Verde bosque
+          cactusGrad.addColorStop(0.4, '#22c55e'); // Verde pradera vibrante
+          cactusGrad.addColorStop(1, '#166534'); // Verde profundo
+
+          ctx.fillStyle = cactusGrad;
           ctx.beginPath();
-          ctx.moveTo(obs.x + obs.width * 0.3, obs.y + 4);
-          ctx.lineTo(obs.x + obs.width * 0.4, obs.y);
+          ctx.roundRect(trunkX, topY, trunkW, cHeight, [9, 9, 2, 2]);
+          ctx.fill();
+
+          // Costillas / nervaduras verticales del cactus
+          ctx.strokeStyle = '#14532d';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(cx - 3, topY + 4);
+          ctx.lineTo(cx - 3, baseY);
+          ctx.moveTo(cx + 3, topY + 4);
+          ctx.lineTo(cx + 3, baseY);
           ctx.stroke();
+
+          // Brazo izquierdo del cactus (curvado hacia arriba)
+          const armLeftY = topY + cHeight * 0.44;
+          ctx.fillStyle = cactusGrad;
+          ctx.beginPath();
+          ctx.roundRect(cx - 18, armLeftY, 11, 7, [2, 0, 2, 2]);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.roundRect(cx - 18, armLeftY - 14, 7, 18, [3, 3, 2, 2]);
+          ctx.fill();
+
+          // Brazo derecho del cactus (curvado hacia arriba, ligeramente más alto)
+          const armRightY = topY + cHeight * 0.32;
+          ctx.beginPath();
+          ctx.roundRect(cx + 7, armRightY, 11, 7, [0, 2, 2, 2]);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.roundRect(cx + 11, armRightY - 16, 7, 20, [3, 3, 2, 2]);
+          ctx.fill();
+
+          // Espinas afiladas (Thorns / Cactus Spines en tronco y ramas)
+          ctx.strokeStyle = '#fef08a'; // Agujas doradas claras
+          ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          for (let sp = 0; sp < 4; sp++) {
+            const sy = topY + 8 + sp * 10;
+            // Espina izquierda
+            ctx.moveTo(trunkX, sy);
+            ctx.lineTo(trunkX - 4, sy - 2);
+            // Espina derecha
+            ctx.moveTo(trunkX + trunkW, sy);
+            ctx.lineTo(trunkX + trunkW + 4, sy - 2);
+          }
+          // Espinas en punta de brazos
+          ctx.moveTo(cx - 14, armLeftY - 14);
+          ctx.lineTo(cx - 16, armLeftY - 18);
+          ctx.moveTo(cx + 15, armRightY - 16);
+          ctx.lineTo(cx + 17, armRightY - 20);
+          ctx.stroke();
+
+          // Flor roja de cactus en la parte superior
+          ctx.fillStyle = '#f43f5e';
+          ctx.beginPath();
+          ctx.arc(cx, topY - 1, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#fde047';
+          ctx.beginPath();
+          ctx.arc(cx, topY - 1, 1.2, 0, Math.PI * 2);
+          ctx.fill();
         } else if (obs.type === 'log') {
           // Fallen wood trunk
           ctx.fillStyle = '#713f12';
@@ -811,7 +1114,6 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
       });
 
       // 5. Render Runner Character (Niña corredora de campo)
-      const runner = s.runner;
       const isInvulnerable = runner.invulnerableTimer > 0;
       // Blinking effect during invulnerability
       const shouldRenderRunner = !isInvulnerable || Math.floor(frame / 4) % 2 === 0;
@@ -1039,29 +1341,242 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
             ctx.arc(rx, ry - 5, 14, 0, Math.PI * 2);
             ctx.fill();
           }
+
+          // Efecto de Super Turbo Energía (⚡ Correr más rápido)
+          if (runner.turboTimer > 0) {
+            // Estela fantasma de velocidad (after-images)
+            ctx.fillStyle = 'rgba(250, 204, 21, 0.3)';
+            ctx.beginPath();
+            ctx.arc(rx - 18, ry - 28, 16, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
+            ctx.beginPath();
+            ctx.arc(rx - 9, ry - 28, 18, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Chispas de velocidad relámpago
+            if (frame % 3 === 0) {
+              s.particles.push({
+                x: rx - 12 + (Math.random() - 0.5) * 16,
+                y: ry - 25 + (Math.random() - 0.5) * 28,
+                vx: -Math.random() * 5 - 3,
+                vy: (Math.random() - 0.5) * 3,
+                size: Math.random() * 3 + 1.5,
+                alpha: 0.9,
+                color: Math.random() > 0.4 ? '#fde047' : '#38bdf8',
+              });
+            }
+          }
         }
       }
 
-      // 6. Giant Churning Mud Avalanche Wave (Left side of the screen)
+      // 5b. Render Perrito Compañero Guardián (Toby: corre, salta, avisa y ayuda a la niña)
+      const dx = s.dog.x;
+      const dy = groundY + s.dog.y;
+
+      // Sombra del perro sobre el pasto verde
+      if (s.dog.isGrounded) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+        ctx.beginPath();
+        ctx.ellipse(dx + 2, groundY + 2, 13, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Animación de trote de las patas del perro
+      const dogLegCycle = s.dog.isGrounded ? Math.sin(frame * 0.42) : 0.7;
+      const tailOscillation = Math.sin(frame * 0.5) * 8;
+      const earBounce = Math.cos(frame * 0.42) * 3;
+
+      // Patas traseras (tono marrón sombra)
+      ctx.strokeStyle = '#b45309';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(dx - 7, dy - 6);
+      ctx.lineTo(dx - 7 - dogLegCycle * 7, dy);
+      ctx.stroke();
+
+      // Patas delanteras
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.moveTo(dx + 9, dy - 6);
+      ctx.lineTo(dx + 9 + dogLegCycle * 7, dy);
+      ctx.stroke();
+
+      // Pata trasera cercana
+      ctx.beginPath();
+      ctx.moveTo(dx - 4, dy - 6);
+      ctx.lineTo(dx - 4 + dogLegCycle * 7, dy);
+      ctx.stroke();
+
+      // Pata delantera cercana
+      ctx.beginPath();
+      ctx.moveTo(dx + 12, dy - 6);
+      ctx.lineTo(dx + 12 - dogLegCycle * 7, dy);
+      ctx.stroke();
+
+      // Cola alegre y vivaz ondeando
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(dx - 10, dy - 13);
+      ctx.quadraticCurveTo(dx - 18, dy - 20 + tailOscillation, dx - 16, dy - 14 + tailOscillation);
+      ctx.stroke();
+
+      // Cuerpo del perrito (marrón caramelo / golden)
+      ctx.fillStyle = '#d97706';
+      ctx.beginPath();
+      ctx.roundRect(dx - 10, dy - 16, 22, 12, 5);
+      ctx.fill();
+
+      // Pecho blanco / crema
+      ctx.fillStyle = '#fef3c7';
+      ctx.beginPath();
+      ctx.ellipse(dx + 8, dy - 12, 4, 5, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cabeza del perrito
+      ctx.fillStyle = '#d97706';
+      ctx.beginPath();
+      ctx.arc(dx + 12, dy - 18, 7.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Hocico alegre extendido hacia adelante
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.roundRect(dx + 15, dy - 17, 7, 5, 2.5);
+      ctx.fill();
+
+      // Nariz negra húmeda
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(dx + 22, dy - 15.5, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ojo vivaz y cariñoso
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(dx + 13.5, dy - 19, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(dx + 14, dy - 19.5, 0.6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Oreja caída / floppy ear que rebota alegre con el viento
+      ctx.fillStyle = '#92400e';
+      ctx.beginPath();
+      ctx.ellipse(dx + 8, dy - 19 + earBounce, 3.5, 6, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Collar rojo con medallita dorada
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(dx + 11, dy - 14, 4, 0.5, Math.PI * 0.9);
+      ctx.stroke();
+
+      // Chapita dorada en el collar
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.arc(dx + 13, dy - 11, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bocadillo de diálogo / Ladrido del perrito ("¡Guau!", "¡Cactus! 🌵", "¡Te ayudo! ✨")
+      if (s.dog.barkTimer > 0) {
+        ctx.font = 'bold 11px sans-serif';
+        const textMetrics = ctx.measureText(s.dog.barkText);
+        const bWidth = textMetrics.width + 14;
+        const bX = dx + 6 - bWidth / 2;
+        const bY = dy - 34;
+
+        // Fondo del globo de diálogo
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.beginPath();
+        ctx.roundRect(bX, bY - 14, bWidth, 18, 6);
+        ctx.fill();
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Pico del globo apuntando al perrito
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.beginPath();
+        ctx.moveTo(dx + 12, bY + 4);
+        ctx.lineTo(dx + 9, bY);
+        ctx.lineTo(dx + 15, bY);
+        ctx.closePath();
+        ctx.fill();
+
+        // Texto del ladrido
+        ctx.fillStyle = '#78350f';
+        ctx.fillText(s.dog.barkText, bX + 7, bY);
+      }
+
+      // 6. Torrente de Agua Azul Generando el Alud de Lodo (Left side of the screen)
       // Visual width on canvas is dynamically inversely proportional to mudGap
-      // mudGap = 50 -> wave at x ~ -20
-      // mudGap = 35 -> wave at x ~ 70
-      // mudGap = 10 -> wave at x ~ 150
-      // mudGap = 0 -> wave reaches runner at x = 180!
       const mudWaveFrontX = Math.max(10, 180 - s.mudGap * 3.4);
 
-      const mudGrad = ctx.createLinearGradient(0, 0, mudWaveFrontX, 0);
-      mudGrad.addColorStop(0, '#1c1006');
-      mudGrad.addColorStop(0.65, '#451a03');
-      mudGrad.addColorStop(0.92, '#78350f');
-      mudGrad.addColorStop(1, 'rgba(120, 53, 15, 0.15)');
+      // --- 6a. Torrente de Agua Azul Impulsora (Origen del desastre) ---
+      // El torrente de agua azul choca contra la tierra y genera la masa de lodo que persigue al jugador
+      const waterTorrentX = Math.max(5, mudWaveFrontX * 0.68);
+      const waterGrad = ctx.createLinearGradient(0, 0, waterTorrentX, 0);
+      waterGrad.addColorStop(0, '#0369a1');    // Azul marino profundo
+      waterGrad.addColorStop(0.4, '#0284c7');  // Azul oceánico
+      waterGrad.addColorStop(0.75, '#38bdf8'); // Azul celeste vibrante
+      waterGrad.addColorStop(1, 'rgba(186, 230, 253, 0.4)'); // Espuma clara translúcida
+
+      ctx.fillStyle = waterGrad;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(waterTorrentX * 0.75, 0);
+      for (let y = 0; y <= h; y += 14) {
+        const wOffset = Math.sin((y * 0.06) + frame * 0.2) * 14 + Math.cos(frame * 0.14) * 6;
+        ctx.lineTo(waterTorrentX + wOffset, y);
+      }
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      ctx.fill();
+
+      // Cresta de espuma blanca del torrente de agua
+      ctx.strokeStyle = '#e0f2fe';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      for (let y = 0; y <= groundY + 20; y += 14) {
+        const wOffset = Math.sin((y * 0.06) + frame * 0.2) * 14 + Math.cos(frame * 0.14) * 6;
+        if (y === 0) ctx.moveTo(waterTorrentX + wOffset, y);
+        else ctx.lineTo(waterTorrentX + wOffset, y);
+      }
+      ctx.stroke();
+
+      // Gotas y remolinos de agua azul brotando del torrente
+      if (frame % 2 === 0) {
+        s.particles.push({
+          x: waterTorrentX - 6 + Math.random() * 12,
+          y: Math.random() * (groundY - 10) + 10,
+          vx: Math.random() * 5 + 3,
+          vy: (Math.random() - 0.5) * 5,
+          size: Math.random() * 5 + 2,
+          alpha: 0.85,
+          color: Math.random() > 0.4 ? '#38bdf8' : '#7dd3fc',
+        });
+      }
+
+      // --- 6b. Alud de Lodo Generado por el Agua (Mud Avalanche) ---
+      const mudGrad = ctx.createLinearGradient(waterTorrentX * 0.4, 0, mudWaveFrontX, 0);
+      mudGrad.addColorStop(0, 'rgba(28, 16, 6, 0.95)');
+      mudGrad.addColorStop(0.5, '#451a03');
+      mudGrad.addColorStop(0.85, '#78350f');
+      mudGrad.addColorStop(1, 'rgba(120, 53, 15, 0.2)');
 
       ctx.fillStyle = mudGrad;
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.lineTo(mudWaveFrontX * 0.7, 0);
 
-      // Churning turbulent wave profile
+      // Perfil turbulento del alud de lodo
       for (let y = 0; y <= h; y += 12) {
         const offset = Math.sin((y * 0.05) + frame * 0.14) * 16 + Math.cos(frame * 0.18) * 8;
         ctx.lineTo(mudWaveFrontX + offset, y);
@@ -1070,7 +1585,7 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
       ctx.closePath();
       ctx.fill();
 
-      // Wave foaming crest
+      // Cresta espumosa de lodo ámbar / tierra húmeda
       ctx.strokeStyle = '#d97706';
       ctx.lineWidth = 4;
       ctx.beginPath();
@@ -1081,7 +1596,7 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
       }
       ctx.stroke();
 
-      // Mud spray droplets flying from wave towards the player
+      // Salpicaduras de lodo proyectándose hacia el frente
       if (frame % 2 === 0) {
         s.particles.push({
           x: mudWaveFrontX + 8,
@@ -1170,12 +1685,12 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
             <div className="text-xs font-heading font-bold text-stone-200">
               {character.name}
             </div>
-            {/* 3 LIVES DISPLAY */}
+            {/* 6 LIVES DISPLAY */}
             <div className="flex items-center gap-1 mt-0.5">
-              {[1, 2, 3].map((heartIndex) => (
+              {[1, 2, 3, 4, 5, 6].map((heartIndex) => (
                 <Heart
                   key={heartIndex}
-                  className={`w-5 h-5 transition-transform ${
+                  className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform ${
                     heartIndex <= lives
                       ? 'text-red-500 fill-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.8)] scale-100'
                       : 'text-stone-700 scale-90'
@@ -1183,7 +1698,7 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
                 />
               ))}
               <span className="text-xs font-mono text-stone-400 ml-1">
-                ({lives}/3)
+                ({lives}/6)
               </span>
             </div>
           </div>
@@ -1242,11 +1757,27 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
 
         {/* Right: Audio & Controls */}
         <div className="flex items-center gap-2">
+          {isTurboActive && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500 border border-yellow-200 text-stone-950 text-xs font-heading font-black animate-pulse shadow-[0_0_12px_rgba(245,158,11,0.8)]">
+              ⚡ TURBO +55%
+            </span>
+          )}
+
+          {isFloodActive && (
+            <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-sky-600 border border-sky-300 text-white text-xs font-heading font-bold animate-pulse shadow-[0_0_12px_rgba(14,165,233,0.8)]">
+              🌊 INUNDACIÓN
+            </span>
+          )}
+
           {isSuperJumpActive && (
             <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-900/60 border border-purple-500 text-purple-200 text-xs font-heading font-bold animate-bounce">
               🥾 Super Salto
             </span>
           )}
+
+          <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-950/80 border border-amber-600/50 text-amber-300 text-xs font-heading font-medium">
+            🐶 Perrito Auxiliar
+          </span>
 
           <button
             onClick={() => {
@@ -1279,6 +1810,22 @@ export const MudRunnerGame: React.FC<MudRunnerGameProps> = ({
 
       {/* Canvas Viewport Frame */}
       <div className="relative w-full overflow-hidden border-x border-b border-amber-900/60 bg-stone-950 shadow-2xl">
+        {/* Banner de Inundación Activa */}
+        {isFloodActive && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex items-center gap-2 px-3.5 py-1 rounded-full bg-sky-950/85 border border-sky-400/80 text-sky-200 text-xs font-heading font-semibold shadow-lg backdrop-blur-sm animate-pulse">
+            <span>🌊</span>
+            <span>¡Inundación en el campo! Salta sobre el agua para no frenarte</span>
+          </div>
+        )}
+
+        {/* Banner de Turbo Activo */}
+        {isTurboActive && (
+          <div className="absolute top-9 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-950/85 border border-amber-400/80 text-yellow-300 text-[11px] font-heading font-bold shadow-lg backdrop-blur-sm">
+            <span>⚡</span>
+            <span>¡TURBO ACTIVADO! Super velocidad +55%</span>
+          </div>
+        )}
+
         <canvas
           ref={canvasRef}
           width={880}

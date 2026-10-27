@@ -54,24 +54,36 @@ export const HowToPlayModal: React.FC<HowToPlayModalProps> = ({ isOpen, onClose 
             </div>
           </div>
 
-          {/* Core Rule: 3 Lives */}
+          {/* Core Rule: 6 Lives */}
           <div className="p-4 rounded-xl bg-red-950/30 border border-red-900/50">
             <div className="flex items-center gap-2 mb-2">
               <div className="flex items-center gap-1">
-                <Heart className="w-5 h-5 text-red-500 fill-red-500" />
-                <Heart className="w-5 h-5 text-red-500 fill-red-500" />
-                <Heart className="w-5 h-5 text-red-500 fill-red-500" />
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <Heart key={i} className="w-4 h-4 sm:w-5 sm:h-5 text-red-500 fill-red-500" />
+                ))}
               </div>
               <h4 className="font-heading font-bold text-red-300 text-base">
-                Sistema de 3 Vidas
+                Sistema de 6 Vidas
               </h4>
             </div>
             <p className="text-stone-300 text-xs sm:text-sm leading-relaxed">
-              Inicias cada carrera con <strong>3 vidas</strong>. Cada vez que tropieces con una roca, caigas
-              en un pozo de barro viscoso o te golpee un tronco, perderás <strong>1 corazón</strong> y la avalancha
-              de lodo ganará <strong>10 metros de ventaja</strong> hacia ti.
-              ¡Si pierdes los 3 corazones o el lodo te alcanza, fin del juego!
+              Inicias cada carrera con <strong>6 vidas</strong> completas para resistir los desafíos del campo.
+              Cada tropiezo con un <strong>cactus espinoso</strong>, pozo de barro o tronco restará <strong>1 corazón</strong> y
+              la avalancha de lodo ganará <strong>10 metros de ventaja</strong>. ¡Si pierdes tus 6 corazones o el lodo te alcanza, fin del juego!
             </p>
+          </div>
+
+          {/* Perrito Compañero Guardián */}
+          <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-600/40 flex items-start gap-3">
+            <span className="text-2xl shrink-0">🐶</span>
+            <div>
+              <h4 className="font-heading font-bold text-amber-300 text-sm mb-1">
+                Tu Fiel Perrito Auxiliar
+              </h4>
+              <p className="text-stone-300 text-xs sm:text-sm leading-relaxed">
+                Tu leal compañero canino corre y salta a tu lado: <strong>ladra alertándote</strong> antes de que te topes con los <strong>cactus</strong> o charcos, y usa su agilidad para <strong>atraer y recoger monedas y orbes de energía</strong> cercanos.
+              </p>
+            </div>
           </div>
 
           {/* Controls Grid */}
@@ -86,11 +98,11 @@ export const HowToPlayModal: React.FC<HowToPlayModalProps> = ({ isOpen, onClose 
                     ESPACIO / ⬆️
                   </kbd>
                   <span className="font-heading font-semibold text-white text-xs">
-                    Salto Ágil
+                    Salto Alto Ágil
                   </span>
                 </div>
                 <p className="text-stone-400 text-xs">
-                  Salta sobre zanjas de lodo, troncos caídos y rocas afiladas.
+                  Salto potenciado de gran altura para sobrevolar limpiamente cactus espinosos, charcos y agua.
                 </p>
               </div>
 
@@ -138,26 +150,31 @@ export const HowToPlayModal: React.FC<HowToPlayModalProps> = ({ isOpen, onClose 
             </div>
           </div>
 
-          {/* Powerups */}
+          {/* Powerups & Eventos */}
           <div>
             <h4 className="font-heading font-bold text-amber-400 text-sm uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Sparkles className="w-4 h-4" /> Objetos de la Pista
+              <Sparkles className="w-4 h-4" /> Objetos de la Pista y Eventos
             </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div className="p-3 rounded-lg bg-stone-800/40 border border-stone-700/40">
-                <div className="text-xl mb-1">🥾</div>
-                <strong className="text-amber-300 block mb-0.5">Botas Resorte</strong>
-                <p className="text-stone-400">Saltos dobles gigantescos para sobrevolar tramos difíciles.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 rounded-lg bg-stone-800/40 border border-amber-500/30">
+                <div className="text-xl mb-1">⚡</div>
+                <strong className="text-yellow-300 block mb-0.5">Orbe de Energía</strong>
+                <p className="text-stone-400">¡Super velocidad turbo (+55%) para distanciarte velozmente del lodo!</p>
               </div>
-              <div className="p-3 rounded-lg bg-stone-800/40 border border-stone-700/40">
+              <div className="p-3 rounded-lg bg-stone-800/40 border border-sky-500/30">
                 <div className="text-xl mb-1">💧</div>
                 <strong className="text-sky-300 block mb-0.5">Agua Manantial</strong>
-                <p className="text-stone-400">Limpia el barro de tus piernas y restaura velocidad máxima.</p>
+                <p className="text-stone-400">Limpia el barro, te da +8m de ventaja y reactiva tu impulso.</p>
               </div>
-              <div className="p-3 rounded-lg bg-stone-800/40 border border-stone-700/40">
-                <div className="text-xl mb-1">🪙</div>
-                <strong className="text-yellow-400 block mb-0.5">Monedas de Oro</strong>
-                <p className="text-stone-400">Suman puntos de récord para ascender en la tabla mundial.</p>
+              <div className="p-3 rounded-lg bg-stone-800/40 border border-purple-500/30">
+                <div className="text-xl mb-1">🥾</div>
+                <strong className="text-purple-300 block mb-0.5">Botas Resorte</strong>
+                <p className="text-stone-400">Saltos dobles gigantescos para sobrevolar obstáculos y agua.</p>
+              </div>
+              <div className="p-3 rounded-lg bg-stone-800/40 border border-blue-500/30">
+                <div className="text-xl mb-1">🌊</div>
+                <strong className="text-sky-400 block mb-0.5">Inundaciones</strong>
+                <p className="text-stone-400">El agua azul inunda el campo y frena el paso. ¡Salta para correr veloz!</p>
               </div>
             </div>
           </div>
